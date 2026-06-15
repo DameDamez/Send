@@ -33,41 +33,42 @@ Tabs.Main:AddInput("TargetUser", {
     end
 })
 
-Tabs.Main:AddDropdown("GiftCategory", {
+local categoryData = {
+    Seeds = {"Gold", "Rainbow", "Dragon's Breath"},
+    Fruits = {},
+    Gears = {"Rusty Watering Can", "Common Watering Can"}
+}
+
+local gearCategoryMap = {
+    ["Rusty Watering Can"] = "WateringCans",
+    ["Common Watering Can"] = "WateringCans"
+}
+
+local function getPluralCategory(itemType)
+    if not itemType then return "Unknown" end
+    return string.gsub(itemType, " ", "") .. "s"
+end
+
+local CategoryDropdown = Tabs.Main:AddDropdown("GiftCategory", {
     Title = "Category",
-    Values = {"Seeds", "Fruits"},
+    Values = {"Seeds", "Fruits", "Gears"},
     Multi = false,
     Default = 1,
     Callback = function(Value)
         category = Value
+        local opts = Fluent.Options
+        if opts and opts.GiftItems then
+            local itemsList = categoryData[Value] or {}
+            opts.GiftItems:SetValues(itemsList)
+            opts.GiftItems:SetValue({}) -- เคลียร์ของเก่าที่เลือกไว้ทิ้ง
+        end
     end
 })
 
-local dynamicItemsList = {"Gold", "Rainbow", "Dragon's Breath"}
-task.spawn(function()
-    pcall(function()
-        if not game:IsLoaded() then game.Loaded:Wait() end
-        local SM = game:GetService("ReplicatedStorage"):WaitForChild("SharedModules", 5)
-        if not SM then return end
-        local seedData = SM:WaitForChild("SeedData", 5)
-        if not seedData then return end
-        
-        for _, v in pairs(require(seedData)) do
-            if v.SeedName then 
-                local fName = string.gsub(v.SeedName, " Seed", "")
-                if not table.find(dynamicItemsList, fName) then
-                    table.insert(dynamicItemsList, fName)
-                end
-            end
-        end
-        table.sort(dynamicItemsList)
-    end)
-end)
-
-Tabs.Main:AddDropdown("GiftItems", {
+local ItemsDropdown = Tabs.Main:AddDropdown("GiftItems", {
     Title = "Items to Send",
     Description = "Select what you want to send",
-    Values = dynamicItemsList,
+    Values = categoryData.Seeds,
     Multi = true,
     Default = {"Gold"},
     Callback = function(Value)
@@ -77,6 +78,62 @@ Tabs.Main:AddDropdown("GiftItems", {
         end
     end
 })
+
+task.spawn(function()
+    pcall(function()
+        if not game:IsLoaded() then game.Loaded:Wait() end
+        local SM = game:GetService("ReplicatedStorage"):WaitForChild("SharedModules", 5)
+        if not SM then return end
+        
+        -- Load Seeds
+        local seedData = SM:WaitForChild("SeedData", 5)
+        if seedData then
+            for _, v in pairs(require(seedData)) do
+                if v.SeedName then 
+                    local fName = string.gsub(v.SeedName, " Seed", "")
+                    if not table.find(categoryData.Seeds, fName) then
+                        table.insert(categoryData.Seeds, fName)
+                    end
+                end
+            end
+            table.sort(categoryData.Seeds)
+        end
+        
+        -- Load Fruits
+        local fruitData = SM:WaitForChild("FruitData", 5)
+        if fruitData then
+            for _, v in pairs(require(fruitData)) do
+                if v.FruitName then
+                    if not table.find(categoryData.Fruits, v.FruitName) then
+                        table.insert(categoryData.Fruits, v.FruitName)
+                    end
+                end
+            end
+            table.sort(categoryData.Fruits)
+        end
+        
+        -- Load Gears and map them
+        local gearData = SM:WaitForChild("GearShopData", 5)
+        if gearData then
+            for _, v in pairs(require(gearData).Data) do
+                if v.ItemName and v.ItemType then
+                    local catName = getPluralCategory(v.ItemType)
+                    gearCategoryMap[v.ItemName] = catName
+                    
+                    if not table.find(categoryData.Gears, v.ItemName) then
+                        table.insert(categoryData.Gears, v.ItemName)
+                    end
+                end
+            end
+            table.sort(categoryData.Gears)
+        end
+        
+        -- อัปเดต Dropdown หลังจากโหลดเสร็จ
+        if categoryData[category] then
+            ItemsDropdown:SetValues(categoryData[category])
+        end
+    end)
+end)
 
 Tabs.Main:AddInput("AmountLimit", {
     Title = "Amount Limit",
@@ -138,8 +195,13 @@ local function performGift()
             end
         end
         if finalCount > 0 then
+            local actualCategory = category
+            if category == "Gears" and gearCategoryMap[itemName] then
+                actualCategory = gearCategoryMap[itemName]
+            end
+            
             table.insert(batch, {
-                Category = category,
+                Category = actualCategory,
                 ItemKey = itemName,
                 Count = finalCount
             })
