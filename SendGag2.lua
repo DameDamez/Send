@@ -79,14 +79,10 @@ local ItemsDropdown = Tabs.Main:AddDropdown("GiftItems", {
     Callback = function(Value)
         items = {}
         for k, v in pairs(Value) do
-            -- แก้บัค UI Library ที่มักจะคืนค่ามาทั้ง Array และ Dictionary ปนกัน
+            -- เช็คเฉพาะคีย์ที่เป็นตัวหนังสือและมีค่าเป็น true เท่านั้น 
+            -- (ข้ามพวกตัวเลขค้างเก่าจากค่า Default ที่ UI Library ทิ้งไว้)
             if type(k) == "string" and v == true then
                 table.insert(items, k)
-            elseif type(k) == "number" and type(v) == "string" then
-                -- เผื่อในกรณีที่มันคืนค่ามาเป็น Array ล้วนๆ
-                if not table.find(items, v) then
-                    table.insert(items, v)
-                end
             end
         end
     end
