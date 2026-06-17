@@ -39,14 +39,19 @@ local categoryData = {
     Gears = {"Rusty Watering Can", "Common Watering Can"}
 }
 
-local gearCategoryMap = {
-    ["Rusty Watering Can"] = "WateringCans",
-    ["Common Watering Can"] = "WateringCans"
-}
-
-local function getPluralCategory(itemType)
-    if not itemType then return "Unknown" end
-    return string.gsub(itemType, " ", "") .. "s"
+-- ฟังก์ชันค้นหา Category ที่แท้จริงจากโฟลเดอร์ในเกม
+local function getRealCategoryFromAssets(itemName, defaultCategory)
+    local ok, Assets = pcall(function() return game:GetService("ReplicatedStorage"):WaitForChild("Assets", 3) end)
+    if ok and Assets then
+        for _, obj in ipairs(Assets:GetChildren()) do
+            if obj:IsA("Folder") then
+                if obj:FindFirstChild(itemName) then
+                    return obj.Name -- คืนค่าชื่อโฟลเดอร์ (เช่น Sprinklers, Props, Mushrooms)
+                end
+            end
+        end
+    end
+    return defaultCategory
 end
 
 local CategoryDropdown = Tabs.Main:AddDropdown("GiftCategory", {
@@ -116,10 +121,7 @@ task.spawn(function()
         local gearData = SM:WaitForChild("GearShopData", 5)
         if gearData then
             for _, v in pairs(require(gearData).Data) do
-                if v.ItemName and v.ItemType then
-                    local catName = getPluralCategory(v.ItemType)
-                    gearCategoryMap[v.ItemName] = catName
-                    
+                if v.ItemName then
                     if not table.find(categoryData.Gears, v.ItemName) then
                         table.insert(categoryData.Gears, v.ItemName)
                     end
@@ -180,24 +182,60 @@ local function performGift()
     local batch = {}
     local totalCount = 0
     local backpack = game:GetService("Players").LocalPlayer:FindFirstChild("Backpack")
+    local character = game:GetService("Players").LocalPlayer.Character
     
     for _, itemName in ipairs(items) do
         local finalCount = 0
-        if backpack then
-            local tool = backpack:FindFirstChild(itemName)
-            if tool then
-                local realCount = tool:GetAttribute("Count")
-                if realCount and type(realCount) == "number" then
-                    finalCount = math.min(amount, realCount)
-                else
-                    finalCount = math.min(amount, 1)
+        local tool = nil
+        
+        if backpack then tool = backpack:FindFirstChild(itemName) end
+        if not tool and character then tool = character:FindFirstChild(itemName) end -- เช็คในตัวเผื่อถือของอยู่
+        
+        if tool then
+            local realCount = tool:GetAttribute("Count")
+            if realCount and type(realCount) == "number" then
+                finalCount = math.min(amount, realCount)
+            else
+                -- นับจำนวนชิ้นที่มีจริงๆ ทั้งในกระเป๋าและที่ถืออยู่
+                local countInstances = 0
+                if backpack then
+                    for _, c in pairs(backpack:GetChildren()) do
+                        if c.Name == itemName then countInstances = countInstances + 1 end
+                    end
                 end
+                if character then
+                    for _, c in pairs(character:GetChildren()) do
+                        if c.Name == itemName then countInstances = countInstances + 1 end
+                    end
+                end
+                finalCount = math.min(amount, countInstances)
+                if finalCount <= 0 then finalCount = 1 end
+            end
+        else
+            -- หาไม่เจอในกระเป๋า (อาจเพราะชื่อโมเดลไม่ตรงกับชื่อเรียก) ให้บังคับส่งไปเลยตามจำนวนที่ขอ
+            if amount == 999999 then
+                finalCount = 1 -- กันเหนียว
+            else
+                finalCount = amount
             end
         end
         if finalCount > 0 then
             local actualCategory = category
-            if category == "Gears" and gearCategoryMap[itemName] then
-                actualCategory = gearCategoryMap[itemName]
+            if category == "Gears" then
+                -- หาหมวดหมู่ที่แท้จริงจากโฟลเดอร์ Assets ในเกม (แม่นยำ 100%)
+                actualCategory = getRealCategoryFromAssets(itemName, "Gears")
+                
+                -- Fallback สำรองเผื่อหาไม่เจอจริงๆ
+                if actualCategory == "Gears" then
+                    local lowerName = itemName:lower()
+                    if string.find(lowerName, "sprinkler") then
+                        actualCategory = "Sprinklers"
+                    elseif string.find(lowerName, "watering can") then
+                        actualCategory = "WateringCans"
+                    elseif string.find(lowerName, "build") or string.find(lowerName, "hammer") then
+                        actualCategory = "Builders"
+                    end
+                end
             end
             
             table.insert(batch, {
@@ -210,10 +248,16 @@ local function performGift()
     end
     
     if #batch > 0 then
+        -- 🔴 เพิ่มระบบ LOG ดูว่ายิงอะไรไปบ้าง
+        warn("📦 [AUTO GIFT LOG] กำลังส่งคำสั่ง (Payload):")
+        for i, data in ipairs(batch) do
+            warn(string.format("   [%d] Category: '%s' | ItemKey: '%s' | Count: %s", i, tostring(data.Category), tostring(data.ItemKey), tostring(data.Count)))
+        end
+        
         pcall(function()
             SendBatch:Fire(targetId, batch, "")
         end)
-        Fluent:Notify({Title="Success", Content="Sent " .. totalCount .. " items!", Duration=2})
+        Fluent:Notify({Title="Sent Request", Content="Sent " .. totalCount .. " items! Check F9 Log", Duration=4})
         return true
     else
         return true -- return true so loop continues waiting for items
