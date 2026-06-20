@@ -6,7 +6,7 @@ local Window = Fluent:CreateWindow({
     SubTitle = "FB : Nattawat",
     TabWidth = 140,
     Size = UDim2.fromOffset(480, 380),
-    Acrylic = true,
+    Acrylic = false,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
