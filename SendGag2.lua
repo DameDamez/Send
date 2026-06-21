@@ -36,11 +36,14 @@ Tabs.Main:AddInput("TargetUser", {
 local categoryData = {
     Seeds = {"Gold", "Rainbow", "Dragon's Breath"},
     Fruits = {},
-    Gears = {"Rusty Watering Can", "Common Watering Can"}
+    Gears = {"Rusty Watering Can", "Common Watering Can", "Trowel"}
 }
 
--- ฟังก์ชันค้นหา Category ที่แท้จริงจากโฟลเดอร์ในเกม
+-- ฟังก์ชันค้นหา Category ที่แท้จริงจากโฟลเดอร์ในเกม หรือทำ Custom Map
 local function getRealCategoryFromAssets(itemName, defaultCategory)
+    -- ทำ Mapping เฉพาะกิจสำหรับของที่ไม่อยู่ใน Assets ตรงๆ หรือชื่อประหลาด
+    if itemName == "Trowel" then return "Trowels" end
+
     local ok, Assets = pcall(function() return game:GetService("ReplicatedStorage"):WaitForChild("Assets", 3) end)
     if ok and Assets then
         for _, obj in ipairs(Assets:GetChildren()) do
